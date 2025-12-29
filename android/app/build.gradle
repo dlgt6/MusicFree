@@ -5,7 +5,6 @@ apply plugin: "com.facebook.react"
 import com.android.build.OutputFile
 import groovy.json.JsonSlurper
 
-
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -71,14 +70,6 @@ def enableProguardInReleaseBuilds = false
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
- *
- * For example, to use the international variant, you can use:
- * `def jscFlavor = 'org.webkit:android-jsc-intl:+'`
- *
- * The international variant includes ICU i18n library and necessary data
- * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
- * give correct results when using with locales other than en-US. Note that
- * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
@@ -95,22 +86,8 @@ static def getVersion() {
     return packageJson["version"]
 }
 
-// static def versionStringToCode(String version) {
-//     def parts = version.split('\\.')
-//     def versionCode = 0
-//     def multiplier = 1000000
-//
-//     parts.each { part ->
-//         versionCode += part.toInteger() * multiplier
-//         multiplier /= 1000
-//     }
-//
-//     return versionCode.intValue()
-// }
-
 def appVersion = getVersion()
 def appVersionCode = 400011
-
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -126,52 +103,55 @@ android {
         versionCode appVersionCode
         versionName appVersion
     }
- // ==================== 彻底重写的签名配置 ====================
-  signingConfigs {
-    debug {
-      storeFile file('ikunshare.keystore')
-      storePassword '@Ikun2.0.1.2'
-      keyAlias 'ikunshare'
-      keyPassword '@Ikun2.0.1.2'
+
+    // ==================== 彻底重写的签名配置 ====================
+    signingConfigs {
+        debug {
+            storeFile file('ikunshare.keystore')
+            storePassword '@Ikun2.0.1.2'
+            keyAlias 'ikunshare'
+            keyPassword '@Ikun2.0.1.2'
+        }
+
+        release {
+            // 安全获取属性（变量名故意改成不和属性冲突）
+            def keystoreFile = project.findProperty("FONGMIBOX_STORE_FILE") ?: ""
+            def keystorePass = project.findProperty("FONGMIBOX_STORE_PASSWORD") ?: ""
+            def keystoreAlias = project.findProperty("FONGMIBOX_KEY_ALIAS") ?: ""
+            def keystoreKeyPass = project.findProperty("FONGMIBOX_KEY_PASSWORD") ?: ""
+
+            // 检查是否注入成功
+            if (!keystoreFile || !keystorePass || !keystoreAlias || !keystoreKeyPass) {
+                throw new GradleException("TVBoxOSC signing properties missing in android/gradle.properties! Check workflow injection.")
+            }
+
+            // 显式赋值，避免任何 DSL 歧义
+            storeFile = file(keystoreFile)
+            storePassword = keystorePass
+            keyAlias = keystoreAlias
+            keyPassword = keystoreKeyPass
+
+            v1SigningEnabled true
+            v2SigningEnabled true
+            enableV3Signing true
+            enableV4Signing true
+        }
     }
 
-    release {
-      // 安全获取属性（变量名故意改成不和属性冲突）
-      def keystoreFile = project.findProperty("FONGMIBOX_STORE_FILE") ?: ""
-      def keystorePass = project.findProperty("FONGMIBOX_STORE_PASSWORD") ?: ""
-      def keystoreAlias = project.findProperty("FONGMIBOX_KEY_ALIAS") ?: ""
-      def keystoreKeyPass = project.findProperty("FONGMIBOX_KEY_PASSWORD") ?: ""
-
-      // 检查是否注入成功
-      if (!keystoreFile || !keystorePass || !keystoreAlias || !keystoreKeyPass) {
-        throw new GradleException("TVBoxOSC signing properties missing in android/gradle.properties! Check workflow injection.")
-      }
-
-      // 显式赋值，避免任何 DSL 歧义
-      storeFile = file(keystoreFile)
-      storePassword = keystorePass
-      keyAlias = keystoreAlias
-      keyPassword = keystoreKeyPass
-
-      v1SigningEnabled true
-      v2SigningEnabled true
-      enableV3Signing true
-      enableV4Signing true
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
     }
-  }
+    // ===========================================================
+}
 
-  buildTypes {
-    debug {
-      signingConfig signingConfigs.debug
-    }
-    release {
-      signingConfig signingConfigs.release
-      minifyEnabled enableProguardInReleaseBuilds
-      proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-    }
-  }
-  // ===========================================================
-
+// dependencies 块必须放在 android { } 闭合之后
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
@@ -189,6 +169,3 @@ dependencies {
     implementation 'net.jthink:jaudiotagger:2.2.5'
     implementation 'androidx.core:core-splashscreen:1.0.0'
 }
-
-
-
