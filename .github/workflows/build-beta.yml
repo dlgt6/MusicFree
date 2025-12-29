@@ -3,49 +3,11 @@ name: Beta 构建
 on:
   push:
     branches: [dev]
-    paths: ['package.json']
-  workflow_dispatch:
-    inputs:
-      force_build:
-        description: '强制构建 Beta 版本'
-        required: false
-        default: 'false'
-        type: boolean
+    paths: ['package.json']  # 保留原逻辑，只在 package.json 变化时自动构建
+  workflow_dispatch:         # 手动触发，随时可以点“Run workflow”
 
 jobs:
-  check-version:
-    if: github.actor == 'maotoumao' || github.event_name == 'push'
-    runs-on: ubuntu-latest
-    outputs:
-      should_build: ${{ steps.version_check.outputs.should_build }}
-      version: ${{ steps.version_check.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check version format
-        id: version_check
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "Current version: $VERSION"
-          
-          # 检查版本是否符合 -beta.xx 格式
-          if [[ $VERSION =~ -beta\.[0-9]{1,2}$ ]]; then
-            echo "✅ Version matches beta format: $VERSION"
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.force_build }}" == "true" ]]; then
-            echo "🔧 Force build triggered by workflow_dispatch"
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Version does not match beta format or not forced: $VERSION"
-            echo "should_build=false" >> $GITHUB_OUTPUT
-          fi
-
   build-beta:
-    needs: check-version
-    if: needs.check-version.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -78,13 +40,13 @@ jobs:
 
       - name: Install Dependencies
         run: npm ci --prefer-offline --no-audit      
-        
+
       - name: Configure TVBoxOSC Signing
         run: |
           cd android
-          ls -l app/TVBoxOSC.jks  # 确认 keystore 存在
+          ls -l app/TVBoxOSC.jks  # 确认 keystore 存在（建议你已将 jks 文件提交到仓库或通过 secrets 解码）
 
-          # 只写入属性即可，build.gradle 会自动识别并优先使用
+          # 写入 gradle.properties，供 build.gradle 使用
           cat <<'EOF' >> gradle.properties
           FONGMIBOX_STORE_FILE=../app/TVBoxOSC.jks
           FONGMIBOX_KEY_ALIAS=TVBoxOSC
@@ -96,7 +58,7 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Beta APK
-        run: | 
+        run: |
           cd android
           ./gradlew assembleRelease --parallel --build-cache --configure-on-demand
 
@@ -108,13 +70,12 @@ jobs:
       - name: Upload Beta APKs
         uses: actions/upload-artifact@v4
         with:
-          name: beta-apks-${{ needs.check-version.outputs.version }}
+          name: beta-apks-$(date +'%Y%m%d-%H%M%S')  # 用时间戳命名，避免冲突
           path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
 
       - name: Build Summary
         run: |
           echo "🎉 Beta build completed successfully!"
-          echo "📦 Version: ${{ needs.check-version.outputs.version }}"
           echo "🚀 Triggered by: ${{ github.event_name }}"
           echo "👤 Actor: ${{ github.actor }}"
